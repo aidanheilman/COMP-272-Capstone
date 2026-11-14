@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.TreeMap;
@@ -189,7 +191,7 @@ abstract class DictionaryTest {
         }
     }
 
-    @Test
+    @Test // This is what is reffered to below // Add complete() to this mix of methods
     void randomOperationsGiveTheSameResultsAsTreeMap() {
         // java.util.TreeMap is used here only as a REFERENCE to check your answers.
         TreeMap<String, Long> reference = new TreeMap<>();
@@ -215,8 +217,8 @@ abstract class DictionaryTest {
     // ------------------------------------------------------------------
 
     @Test
-    @Disabled("Remove this line once DatasetReader.readWordCounts works "
-            + "and count_1w.txt is in the data folder")
+    //@Disabled("Remove this line once DatasetReader.readWordCounts works "
+    //        + "and count_1w.txt is in the data folder")
     void everyWordOfTheDatasetIsFoundWithItsCount() throws IOException {
         List<DatasetReader.WordCount> words =
                 DatasetReader.readWordCounts(Path.of("data", "count_1w.txt"), 10_000);
@@ -231,14 +233,180 @@ abstract class DictionaryTest {
     }
 
     // ------------------------------------------------------------------
-    // TODO: add your own tests. At least:
-    //  - Tests whose expected values YOU read from the dataset. For example: open
+    // ADNAN DOES BELOW 
+    //  1. Tests whose expected values YOU read from the dataset. For example: open
     //    count_1w.txt, find the 5 most frequent words that start with "pro", and check
     //    that complete("pro", 5) returns exactly them, in that order.
-    //  - A few words from a Gutenberg book that are NOT in the word list.
-    //  - complete with prefixes of length 1, 2, 3 and 5 on the full word list.
-    //  - A random comparison like the one above that also checks complete().
-    //  - Any special case of YOUR implementation (e.g. resizing, deleting in open
-    //    addressing, rebalancing after remove).
+    //  2. A few words from a Gutenberg book that are NOT in the word list. // ASK PROFESSOR 
+    //     -- Run words through the methods that are not in wordlist to test behavior
+    //     -- Words should be from Gutenberg book  
+    //
+    // AIDAN DOES BELOW
+    //  3. complete with prefixes of length 1, 2, 3 and 5 on the full word list.
+    //  4. A random comparison like the one above that also checks complete(). // ASK PROFESSOR
+    //     -- see above 
+    //  5. Any special case of YOUR implementation (e.g. resizing, deleting in open
+    //     addressing, rebalancing after remove).
     // ------------------------------------------------------------------
+
+    /* ADDITIONAL TESTS START HERE */
+
+    /* Test 1 */
+    /** Helper to load the dataset from count_1w.txt into dict. */
+    private void loadDataset(int limit) throws IOException {
+        List<DatasetReader.WordCount> words =
+                DatasetReader.readWordCounts(Path.of("data", "count_1w.txt"), limit);
+        for (DatasetReader.WordCount wc : words) {
+            dict.add(wc.word(), wc.count());
+        }
+    }
+
+    @Test
+    void completeProReturnsTopFiveFromDataset() throws IOException {
+        loadDataset(10_000);
+
+        // Verified directly from data/count_1w.txt
+        List<String> expected = List.of(
+                "products",
+                "product",
+                "program",
+                "project",
+                "profile"
+        );
+        assertEquals(expected, dict.complete("pro", 5));
+    }
+
+
+    /* Test 2 */
+    @Test
+    void gutenbergWordsNotInDatasetWorkAcrossAllMethods() throws IOException {
+        loadDataset(10_000);
+        int initialSize = dict.size();
+
+        // Rare words from Project Gutenberg books absent from count_1w.txt:
+        // "uproariousness" (Tom Jones), "sesquipedalianism" (Anatomy of Melancholy),
+        // and "unconscionableness" (Pamela)
+        List<String> absentWords = List.of(
+                "uproariousness",
+                "sesquipedalianism",
+                "unconscionableness"
+        );
+
+        for (String word : absentWords) {
+            // 1. Verify initial absence across all query/delete methods
+            assertFalse(dict.contains(word), "Should not contain: " + word);
+            assertEquals(0, dict.frequency(word), "Frequency should be 0: " + word);
+            assertEquals(List.of(), dict.complete(word, 5), "No completions expected: " + word);
+            assertFalse(dict.remove(word), "Removing absent word should return false: " + word);
+            assertEquals(initialSize, dict.size());
+
+            // 2. Add the word and verify it is now found and returned by complete
+            dict.add(word, 42);
+            assertTrue(dict.contains(word), "Should contain after add: " + word);
+            assertEquals(42, dict.frequency(word), "Frequency should match added count: " + word);
+            assertEquals(List.of(word), dict.complete(word, 5), "Should complete to itself: " + word);
+            assertEquals(initialSize + 1, dict.size());
+            
+            // 3. Remove the word and verify it is completely gone again
+            assertTrue(dict.remove(word), "Removing present word should return true: " + word);
+            assertFalse(dict.contains(word), "Should not contain after remove: " + word);
+            assertEquals(0, dict.frequency(word), "Frequency should reset to 0: " + word);
+            assertEquals(List.of(), dict.complete(word, 5), "No completions after remove: " + word);
+            assertEquals(initialSize, dict.size());
+        }
+    }
+
+
+    /* Test 3 */
+    /* Checks complete() method against full wordlist with prefixes of len 1, 2, 3, && 5 */
+    @Test
+    void completeMethodAgainstWordlist() throws IOException {
+        List<DatasetReader.WordCount> words =
+            DatasetReader.readWordCounts(Path.of("data", "count_1w.txt"), Integer.MAX_VALUE); // init 
+        for (DatasetReader.WordCount wc : words) {
+            dict.add(wc.word(), wc.count()); // add all
+        }
+        // run complete() prefixes == 1,2,3,5 with k == 3
+        // need to find words and note by hand what expected outcomes are for assert.equals statemets
+        // could use grep for this
+            /**
+             * GREP RESULTS 
+             * 'w' top 3 frequency are with, was, we
+             * 'mo' top 3 frequency are more, most, money
+             * 'cli' top 3 frequency are click, client, clients
+             * 'radio' top 3 frequency are radio, radios, radioactive
+            */
+        assertEquals(List.of("with", "was", "we"), dict.complete("w", 3));
+        assertEquals(List.of("more", "most", "money"), dict.complete("mo", 3));
+        assertEquals(List.of("click", "client", "clients"), dict.complete("cli", 3));
+        assertEquals(List.of("radio", "radios", "radioactive"), dict.complete("radio", 3));
+    }
+    
+    /* Test 4 */
+    // basically take above random test and check it with addition of complete
+    // Use loops and a list or set to add the words
+    @Test // This is what is reffered to below // Add complete() to this mix of methods
+    void randomOperationsGiveTheSameResultsViaComplete() {
+        // java.util.TreeMap is used here only as a REFERENCE to check your answers.
+        TreeMap<String, Long> reference = new TreeMap<>();
+        Random random = new Random(42);   // fixed seed: the test is repeatable
+        for (int step = 0; step < 50_000; step++) {
+            String word = "w" + random.nextInt(2_000);
+            int operation = random.nextInt(3);
+            if (operation == 0) {
+                long count = random.nextInt(1_000);
+                dict.add(word, count);
+                reference.put(word, count);
+            } else if (operation == 1) {
+                assertEquals(reference.remove(word) != null, dict.remove(word), "remove " + word);
+            } else {
+                assertEquals(reference.getOrDefault(word, 0L), dict.frequency(word), "frequency " + word);
+            }
+            assertEquals(reference.size(), dict.size());
+
+            // Randomly check autocomplete every 100 operations.
+            if (step % 100 == 0) {
+                List<String> expected = new ArrayList<>();
+                String prefix = "w" + random.nextInt(100); // prefix will be w0 through w99
+                int k = random.nextInt(11); // k can be 0-10
+
+                // Only run sorting logic if k is not 0 
+                if (k != 0) {
+                // Collect the words that currently match the random prefix.
+                    for (String candidate : reference.keySet()) {
+                        if (candidate.startsWith(prefix)) {
+                        expected.add(candidate);
+                        }
+                    }
+                // Rank matches by frequency descending, then alphabetically ascending.
+                // Uses an internal comparator object passed into java's .sort() function
+                // Comparator is used to sort the list in place by frequency, rather than lexicographically
+                    expected.sort(new Comparator<String>() {
+                        @Override
+                        public int compare(String first, String second) {
+                            int frequencyOrder =
+                                Long.compare(reference.get(second), reference.get(first));
+
+                            if (frequencyOrder != 0) {
+                                return frequencyOrder;
+                            }
+
+                            return first.compareTo(second);
+                        }
+                    });
+
+                    // Keep only the first k words, if there are more than k matches.
+                    if (expected.size() > k) {
+                        expected = new ArrayList<>(expected.subList(0, k));
+                    }
+                }
+            // Compare the expected answer with the dictionary's result.
+            assertEquals(expected, dict.complete(prefix, k));   
+            }
+        }
+    }
+
+    /* Test 5 */
+    // Internal testing
+    // See Solution1Test && Solution2Test
 }

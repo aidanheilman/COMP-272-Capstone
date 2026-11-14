@@ -6,7 +6,7 @@ import java.util.List;
  * The dictionary service of Application A (autocomplete and spell-checking).
  *
  * <p>This interface IS the functional requirements specification. Both of your
- * solutions ({@link Solution1} and {@link Solution2}) must implement it exactly
+ * solutions ({@link Solution1} and {@link Solution2RBTree}) must implement it exactly
  * as documented here. Do not change the method names or signatures.
  *
  * <p>Words are case-sensitive: the dictionary stores them exactly as given.

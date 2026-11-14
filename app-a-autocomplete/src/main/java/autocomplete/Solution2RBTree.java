@@ -1,8 +1,11 @@
 package autocomplete;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 /**
  * Solution 2 for the dictionary service.
@@ -20,6 +23,27 @@ import java.util.PriorityQueue;
  * <p>You may rename this class to something more descriptive (e.g. TreeDictionary).
  * If you do, also rename it in Solution2Test.
  */
+
+/**
+ * Solution 2 for the dictionary service.
+ * A Red-Black tree, lexicographically ordered
+ * 
+ * The code is a combination of written by our team, adapted from course code, namely Assignment 4,
+ * and several Java library classes
+ * 
+ * Time Complexity of primary methods:
+ * size() O(1)
+ * add() O(log n)
+ * remove() O(log n)
+ * contains() O(log n)
+ * frequency() O(log n)
+ * complete() Generally O(log n + m log m + k log m), O(n log n) if all words match
+ * Where 
+ * n = size of the tree
+ * m = matches found in complete()
+ * k = number of matches to be returned in complete()
+ *
+ */
 public class Solution2RBTree implements Dictionary {
 
     private static final class Node implements Comparable<Node> {
@@ -36,13 +60,6 @@ public class Solution2RBTree implements Dictionary {
             this.parent = parent;
             this.isRed = true; // A newly inserted node starts red
         }
-        // Not needed
-        //public String getWord() { return word; }
-        //public long getFrequency() { return frequency; }
-        //public Node getLeft() { return left; }
-        //public Node getRight() { return right; }
-        //public Node getParent() { return parent; }
-        //public boolean getRed() { return isRed; }
 
         // compareTo lib call override for node comparison for heap sorting
         @Override
@@ -58,20 +75,20 @@ public class Solution2RBTree implements Dictionary {
     private Node root;
     private int size;
 
-    // TODO: declare the fields of your data structure here.
-
+    // fields
     public Solution2RBTree() {
         root = null;
         size = 0;
     }
 
+     // Find where the node belongs, or update its frequency if it is already present.
     @Override
     public void add(String word, long count) {
         Node parent = null;
         Node current = root;
         int comparison = 0;
 
-        // Find where the word belongs, or update its frequency if it is already present.
+        // Search, update frequency if found
         while (current != null) {
             parent = current;
             comparison = word.compareTo(current.word);
@@ -104,6 +121,8 @@ public class Solution2RBTree implements Dictionary {
         root.isRed = false;
     }
 
+    // Adapted from course code
+    // Finds node to delete, returns true on success, false otherwise
     @Override
     public boolean remove(String word) {
         Node target = findNode(word);
@@ -142,6 +161,8 @@ public class Solution2RBTree implements Dictionary {
         return findNode(word) != null;
     }
 
+    // Returns frequency of node, 0 if not found
+    // Note that frequency() also returns 0 if frequency of node is 0
     @Override
     public long frequency(String word) {
         Node node = findNode(word);
@@ -152,6 +173,9 @@ public class Solution2RBTree implements Dictionary {
         }
     }
 
+    // Given prefix and k, return k highest frequency words beginning with given prefix as a list
+    // Return empty list if k = 0, all matching words if k < matches, pull from entire tree if prefix = ""
+    //     
     @Override
     public List<String> complete(String prefix, int k) {
         List<String> result = new ArrayList<>();
@@ -159,21 +183,22 @@ public class Solution2RBTree implements Dictionary {
             return result;
         }
 
-        // Node's natural ordering puts highest frequency, then alphabetically
-        // earliest, at the head of the priority queue.
+        // Declare priority queue for sorting by frequency
         PriorityQueue<Node> matches = new PriorityQueue<>();
 
-        // Prefix matches occupy one contiguous range in the lexicographically
-        // ordered tree. Start at the first key not less than the prefix rather
-        // than scanning unrelated words before that range.
+        // Prefix matches occupy one contiguous range in the ordered tree. 
+        // Start at the first match not less than the prefix rather
+        // than scanning unrelated words before that range using findlowerbound()
+        // Add all to priority queue
         Node current = findLowerBound(prefix);
         while (current != null && current.word.startsWith(prefix)) {
             matches.add(current);
             current = successor(current);
         }
 
-        // The queue is ordered by the required final ranking, so removing its head
-        // repeatedly returns up to k words in the correct order.
+        // The queue is ordered by the frequency because node was made to be comparable
+        // so removing its head repeatedly returns up to k words in the correct order.
+        // Add to list and return
         int resultsToReturn = Math.min(k, matches.size());
         for (int i = 0; i < resultsToReturn; i++) {
             result.add(matches.remove().word);
@@ -182,6 +207,7 @@ public class Solution2RBTree implements Dictionary {
         return result;
     }
 
+    // Size updated with add and remove function calls
     @Override
     public int size() {
         return size;
@@ -460,6 +486,68 @@ public class Solution2RBTree implements Dictionary {
         }
 
         setRed(node, false);
+    }
+
+    // TESTING HELPERS //
+
+    // Called by Solution2Test.java //
+    // Calls validateNode() starting at the root to check the whole tree, and checks size.
+    void assertValidRB() {
+        if (root != null && root.parent != null) {
+            throw new AssertionError("the root must not have a parent");
+        }
+        if (isRed(root)) {
+            throw new AssertionError("the root must be black");
+        }
+
+        // Uses an identity hash map to compare by object identity
+        // Wrapped inside of a set for simplicity/applicability of set methods
+        Set<Node> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        validateNode(root, null, null, null, visited);
+
+        if (visited.size() != size) {
+            throw new AssertionError(
+                    "stored size is " + size + ", but tree contains " + visited.size() + " nodes");
+        }
+    }
+
+    // Checks ordering, parent links, and red-black properties recursively.
+    // Throws a descriptive assertion error if any check fails.
+    // Called by assertValidRB.
+    private int validateNode(
+            Node node, String lowerBound, String upperBound, Node expectedParent, Set<Node> visited) {
+        // A null child is a black external leaf, so its black-height is 1.
+        if (node == null) return 1;
+
+        // If visited.add node returns false, the node was reached before
+        // Each node is checked once, so this should not occur
+        if (!visited.add(node)) {
+            throw new AssertionError("tree contains a cycle or a node with multiple parents");
+        }
+        if (node.parent != expectedParent) {
+            throw new AssertionError("incorrect parent link at " + node.word);
+        }
+        if (lowerBound != null && node.word.compareTo(lowerBound) <= 0) {
+            throw new AssertionError("node " + node.word + " is not greater than its lower bound");
+        }
+        if (upperBound != null && node.word.compareTo(upperBound) >= 0) {
+            throw new AssertionError("node " + node.word + " is not less than its upper bound");
+        }
+
+        if (node.isRed && (isRed(node.left) || isRed(node.right))) {
+            throw new AssertionError("red node " + node.word + " has a red child");
+        }
+
+        int leftBlackHeight =
+                validateNode(node.left, lowerBound, node.word, node, visited);
+        int rightBlackHeight =
+                validateNode(node.right, node.word, upperBound, node, visited);
+
+        if (leftBlackHeight != rightBlackHeight) {
+            throw new AssertionError("unequal black-heights below " + node.word);
+        }
+
+        return leftBlackHeight + (node.isRed ? 0 : 1);
     }
 
 }

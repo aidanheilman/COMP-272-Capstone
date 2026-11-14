@@ -1,22 +1,12 @@
 package autocomplete;
 
 import java.util.List;
-
 /**
- * Solution 1 for the dictionary service.
- *
- * <p>TODO: Replace this comment with a short description of your solution:
- * <ul>
- *   <li>the data structure(s) used (e.g. "a hash table with separate chaining");</li>
- *   <li>where the code comes from: written by your team, adapted from course code,
- *       or a library class (e.g. java.util.TreeMap). Cite the source;</li>
- *   <li>the expected time complexity of each method below.</li>
- * </ul>
- * The full explanation of the implementation and of its expected performance
- * goes in your report.
- *
- * <p>You may rename this class to something more descriptive (e.g. HashDictionary).
- * If you do, also rename it in Solution1Test.
+ * Solution 1 for the dictionary service
+ * DESCRIPTION: Custom AVL tree holding alphabetically sorted words (A-Z) and frequencies.
+ * SOURCE: Code written entirely from scratch by our team.
+ * COMPLEXITIES: size(): O(1), contains(): O(log N), frequency(): O(log N),
+ * add(): O(log N), remove(): O(log N), complete(): O(log N + M + M log M)
  */
 public class Solution1 implements Dictionary {
     private class Node {
@@ -28,12 +18,6 @@ public class Solution1 implements Dictionary {
     // TODO: declare the fields of your data structure here.
 
     public Solution1() {
-        /*
-         * DESCRIPTION: Custom AVL tree holding alphabetically sorted words (A-Z) and frequencies.
-         * SOURCE: Code written entirely from scratch by our team.
-         * COMPLEXITIES: size(): O(1), contains(): O(log N), frequency(): O(log N),
-         * add(): O(log N), remove(): O(log N), complete(): O(log N + M + M log M)
-         */
         this.root = null;
         this.size = 0;
     }
@@ -120,7 +104,14 @@ public class Solution1 implements Dictionary {
                     c.w = m.w; c.c = m.c; if (path.peek() == c) c.r = m.r; else path.peek().l = m.r; rep = c;
                 }
                 // Attaching the replacement node to the parent node's pointer.
-                if (path.isEmpty()) root = rep; else { Node parent = path.peek(); if (parent.l == c) parent.l = rep; else parent.r = rep; }
+                if (path.isEmpty()) {
+                    root = rep;
+                } else if (rep != c) {
+                    Node parent = path.peek();
+                    if (parent.l == c) parent.l = rep;
+                    else parent.r = rep;
+                }
+                
 
                 // Unwinding the stack to fix heights and rotate any unbalanced AVL ancestors.
                 while (!path.isEmpty()) {
@@ -159,25 +150,38 @@ public class Solution1 implements Dictionary {
 
     @Override
     public boolean contains(String w) {
-        // Checking if the word exists by verifying if its recorded frequency is greater than 0.
-        return frequency(w) > 0;
+        Node current = root;
+
+        // Searching the tree while the search word is valid, 
+        // we haven't hit a dead end, and the frequency isn't found.
+        while (w != null && current != null) {
+            int cmp = w.compareTo(current.w); 
+
+            // If the word matches the current node, return its count. 
+            // Otherwise, branch left or right based on alphabetical order.
+            if (cmp == 0) {return true;} 
+            current = cmp < 0 ? current.l : current.r;
+        }
+        // Return 0 if the word was not inside the tree.
+        return false;
     }
 
     @Override
     public long frequency(String w) {
-        long f = 0; Node c = root;
+        Node current = root;
 
         // Searching the tree while the search word is valid, 
         // we haven't hit a dead end, and the frequency isn't found.
-        while (w != null && c != null && f == 0) {
-            int cmp = w.compareTo(c.w); 
+        while (w != null && current != null) {
+            int cmp = w.compareTo(current.w); 
 
-            // If the word matches the current node, retrieve its count. 
+            // If the word matches the current node, return its count. 
             // Otherwise, branch left or right based on alphabetical order.
-            if (cmp == 0) f = c.c; else c = cmp < 0 ? c.l : c.r;
+            if (cmp == 0) {return current.c;} 
+            current = cmp < 0 ? current.l : current.r;
         }
-        // Returning the found count (or 0 if the word was not inside the tree).
-        return f;
+        // Return 0 if the word was not inside the tree.
+        return 0;
     }
 
     @Override
@@ -214,8 +218,8 @@ public class Solution1 implements Dictionary {
         // Returning size.
         return size;
     }
-    
-    // Test method.
+
+    //Test method.
     public static void main(String[] args) {
         Solution1 d = new Solution1();
         String[] w = {"apple", "banana", "cherry", "apricot"};
@@ -228,5 +232,56 @@ public class Solution1 implements Dictionary {
         d.remove("banana");
         System.out.println("Size after delete (3): " + d.size());
         System.out.println("Contains banana (false): " + d.contains("banana"));
+    } 
+
+    // TESTING HELPERS //
+
+    // Called by Solution1Test.java //
+    // Calls validateNode() starting at the root to recursively check the whole tree, and checks size
+    void assertValidAVL() {
+        validateNode(root, null, null);
+
+        int actualSize = countNodes(root);
+        if (actualSize != size) {
+            throw new AssertionError(
+                    "stored size is " + size + ", but tree contains " + actualSize + " nodes");
+        }
+    }
+
+    // Checks ordering, heights, and AVL balance of nodes recursively
+    // Throws descriptive assertion error if any one test fails
+    // Called by assertValidAVL
+    private int validateNode(Node node, String lowerBound, String upperBound) {
+        if (node == null) return 0;
+
+        if (lowerBound != null && node.w.compareTo(lowerBound) <= 0) {
+            throw new AssertionError("node " + node.w + " is not greater than its lower bound");
+        }
+        if (upperBound != null && node.w.compareTo(upperBound) >= 0) {
+            throw new AssertionError("node " + node.w + " is not less than its upper bound");
+        }
+
+        int leftHeight = validateNode(node.l, lowerBound, node.w);
+        int rightHeight = validateNode(node.r, node.w, upperBound);
+
+        int expectedHeight = 1 + Math.max(leftHeight, rightHeight);
+        if (node.h != expectedHeight) {
+            throw new AssertionError(
+                    "incorrect height at " + node.w + ": stored " + node.h
+                            + ", expected " + expectedHeight);
+        }
+
+        if (Math.abs(leftHeight - rightHeight) > 1) {
+            throw new AssertionError("AVL balance violated at " + node.w);
+        }
+
+        return expectedHeight;
+    }
+
+    // Recursively counts every node in the AVL
+    // To be checked against internal size variable in assertValidAVL
+    private int countNodes(Node node) {
+        if (node == null) return 0;
+        return 1 + countNodes(node.l) + countNodes(node.r);
     }
 }
