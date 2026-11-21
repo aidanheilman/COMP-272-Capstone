@@ -14,12 +14,36 @@ public class Solution1 implements Dictionary {
         Node(String word, long count) { w = word; c = count; }
     }
     private Node root; private int size;
+    private boolean instrumentationEnabled;
+    private long rotationCount;
 
     // TODO: declare the fields of your data structure here.
 
     public Solution1() {
         this.root = null;
         this.size = 0;
+        this.instrumentationEnabled = false;
+        this.rotationCount = 0;
+    }
+
+    public void setInstrumentationEnabled(boolean enabled) {
+        instrumentationEnabled = enabled;
+    }
+
+    public void resetInstrumentationCounters() {
+        rotationCount = 0;
+    }
+
+    public long getRotationCount() {
+        return rotationCount;
+    }
+
+    public int getTreeHeight() {
+        return root == null ? 0 : root.h;
+    }
+
+    private void recordRotation() {
+        if (instrumentationEnabled) rotationCount++;
     }
 
     @Override
@@ -51,11 +75,13 @@ public class Solution1 implements Dictionary {
                     if (hl - hr > 1) {
                         // If it's a Left-Right case, perform an initial left rotation on the child.
                         Node l = n.l; if ((l.l == null ? 0 : l.l.h) < (l.r == null ? 0 : l.r.h)) {
+                            recordRotation();
                             Node y = l.r; l.r = y.l; y.l = l; n.l = y;
                             l.h = 1 + Math.max(l.l == null ? 0 : l.l.h, l.r == null ? 0 : l.r.h);
                             y.h = 1 + Math.max(y.l == null ? 0 : y.l.h, y.r == null ? 0 : y.r.h);
                         }
                         // Perform the main right rotation on node 'n'.
+                        recordRotation();
                         Node x = n.l; n.l = x.r; x.r = n; b = x;
                         n.h = 1 + Math.max(n.l == null ? 0 : n.l.h, n.r == null ? 0 : n.r.h);
                         x.h = 1 + Math.max(x.l == null ? 0 : x.l.h, x.r == null ? 0 : x.r.h);
@@ -64,11 +90,13 @@ public class Solution1 implements Dictionary {
 
                          // If it's a Right-Left case, perform an initial right rotation on the child.
                         Node r = n.r; if ((r.r == null ? 0 : r.r.h) < (r.l == null ? 0 : r.l.h)) {
+                            recordRotation();
                             Node x = r.l; r.l = x.r; x.r = r; n.r = x;
                             r.h = 1 + Math.max(r.l == null ? 0 : r.l.h, r.r == null ? 0 : r.r.h);
                             x.h = 1 + Math.max(x.l == null ? 0 : x.l.h, x.r == null ? 0 : x.r.h);
                         }
                         // Perform the main left rotation on node 'n'.
+                        recordRotation();
                         Node y = n.r; n.r = y.l; y.l = n; b = y;
                         n.h = 1 + Math.max(n.l == null ? 0 : n.l.h, n.r == null ? 0 : n.r.h);
                         y.h = 1 + Math.max(y.l == null ? 0 : y.l.h, y.r == null ? 0 : y.r.h);
@@ -121,10 +149,12 @@ public class Solution1 implements Dictionary {
                     // Rebalancing Left-Heavy subtrees (Left-Right and Left-Left cases).
                     if (hl - hr > 1) {
                         Node l = n.l; if ((l.l == null ? 0 : l.l.h) < (l.r == null ? 0 : l.r.h)) {
+                            recordRotation();
                             Node y = l.r; l.r = y.l; y.l = l; n.l = y;
                             l.h = 1 + Math.max(l.l == null ? 0 : l.l.h, l.r == null ? 0 : l.r.h);
                             y.h = 1 + Math.max(y.l == null ? 0 : y.l.h, y.r == null ? 0 : y.r.h);
                         }
+                        recordRotation();
                         Node x = n.l; n.l = x.r; x.r = n; b = x;
                         n.h = 1 + Math.max(n.l == null ? 0 : n.l.h, n.r == null ? 0 : n.r.h);
                         x.h = 1 + Math.max(x.l == null ? 0 : x.l.h, x.r == null ? 0 : x.r.h);
@@ -132,10 +162,12 @@ public class Solution1 implements Dictionary {
                     // Rebalancing Right-Heavy subtrees (Right-Left and Right-Right cases).
                     } else if (hr - hl > 1) {
                         Node r = n.r; if ((r.r == null ? 0 : r.r.h) < (r.l == null ? 0 : r.l.h)) {
+                            recordRotation();
                             Node x = r.l; r.l = x.r; x.r = r; n.r = x;
                             r.h = 1 + Math.max(r.l == null ? 0 : r.l.h, r.r == null ? 0 : r.r.h);
                             x.h = 1 + Math.max(x.l == null ? 0 : x.l.h, x.r == null ? 0 : x.r.h);
                         }
+                        recordRotation();
                         Node y = n.r; n.r = y.l; y.l = n; b = y;
                         n.h = 1 + Math.max(n.l == null ? 0 : n.l.h, n.r == null ? 0 : n.r.h);
                         y.h = 1 + Math.max(y.l == null ? 0 : y.l.h, y.r == null ? 0 : y.r.h);
