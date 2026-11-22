@@ -74,11 +74,36 @@ public class Solution2RBTree implements Dictionary {
 
     private Node root;
     private int size;
+    private boolean instrumentationEnabled;
+    private long rotationCount;
 
     // fields
     public Solution2RBTree() {
         root = null;
         size = 0;
+        instrumentationEnabled = false;
+        rotationCount = 0;
+    }
+
+    public void setInstrumentationEnabled(boolean enabled) {
+        instrumentationEnabled = enabled;
+    }
+
+    public void resetInstrumentationCounters() {
+        rotationCount = 0;
+    }
+
+    public long getRotationCount() {
+        return rotationCount;
+    }
+
+    public int getTreeHeight() {
+        return heightOf(root);
+    }
+
+    private int heightOf(Node node) {
+        if (node == null) return 0;
+        return 1 + Math.max(heightOf(node.left), heightOf(node.right));
     }
 
      // Find where the node belongs, or update its frequency if it is already present.
@@ -318,6 +343,7 @@ public class Solution2RBTree implements Dictionary {
 
     /** Rotates the subtree rooted at oldRoot to the left and returns its new root. */
     protected Node rotateLeft(Node oldRoot) {
+        if (instrumentationEnabled) rotationCount++;
         Node newRoot = oldRoot.right;
         Node middle = newRoot.left;
 
@@ -335,6 +361,7 @@ public class Solution2RBTree implements Dictionary {
 
     /** Rotates the subtree rooted at oldRoot to the right and returns its new root. */
     protected Node rotateRight(Node oldRoot) {
+        if (instrumentationEnabled) rotationCount++;
         Node newRoot = oldRoot.left;
         Node middle = newRoot.right;
 
