@@ -16,49 +16,159 @@ import java.nio.file.Path;
 public class Benchmark {
     static final int WARMUP_RUNS = 5;
     static final int MEASURED_RUNS = 7;
+    static final int TOP_K = 10;
+
+    @FunctionalInterface
+    interface Workload {
+        long run(Dictionary dictionary);
+    }
 
     /** Measures contains calls and prints one row for each measured run. */
     static void measure(String solution, Supplier<Dictionary> factory,
                         List<DatasetReader.WordCount> words, List<String> queries, int n) {
+        measureWorkload(solution, "contains", factory, words, queries.size(), n, dictionary -> {
+            long hits = 0;
+            for (String query : queries) {
+                if (dictionary.contains(query)) {
+                    hits++;
+                }
+            }
+            return hits;
+        });
+    }
+
+    /** Measures contains calls for generated one-character mutations of dataset words. */
+    static void measureMisspellings(
+            String solution,
+            Supplier<Dictionary> factory,
+            List<DatasetReader.WordCount> words,
+            List<String> misspellings,
+            int n) {
+        measureWorkload(solution, "misspellings", factory, words, misspellings.size(), n, dictionary -> {
+            long hits = 0;
+            for (String query : misspellings) {
+                if (dictionary.contains(query)) {
+                    hits++;
+                }
+            }
+            return hits;
+        });
+    }
+
+    /** Measures autocomplete calls for generated prefixes of dataset words. */
+    static void measurePrefixQueries(
+            String solution,
+            Supplier<Dictionary> factory,
+            List<DatasetReader.WordCount> words,
+            List<String> prefixes,
+            int n) {
+        measureWorkload(solution, "prefix_queries", factory, words, prefixes.size(), n, dictionary -> {
+            long resultCount = 0;
+            for (String prefix : prefixes) {
+                resultCount += dictionary.complete(prefix, TOP_K).size();
+            }
+            return resultCount;
+        });
+    }
+
+    /** Runs a batch workload on a freshly built dictionary and prints each measured run. */
+    private static void measureWorkload(
+            String solution,
+            String workloadName,
+            Supplier<Dictionary> factory,
+            List<DatasetReader.WordCount> words,
+            int operationCount,
+            int n,
+            Workload workload) {
+        if (operationCount <= 0) {
+            throw new IllegalArgumentException("A benchmark workload must contain operations.");
+        }
+
+        long[] buildTimes = new long[MEASURED_RUNS];
         long[] times = new long[MEASURED_RUNS];
+        long[] memoryBytes = new long[MEASURED_RUNS];
         long[] rotations = new long[MEASURED_RUNS];
         int[] heights = new int[MEASURED_RUNS];
-        long checksum = 0;                         // prevents dead-code elimination
+        long checksum = 0;
 
         for (int run = 0; run < WARMUP_RUNS + MEASURED_RUNS; run++) {
-            Dictionary dictionary = factory.get(); // a fresh structure each run
+            long memoryBefore = usedMemory();
+            Dictionary dictionary = factory.get();
 
-            setInstrumentationEnabled(dictionary, true); //enable & reset counters for build
-            resetInstrumentationCounters(dictionary);
+            long buildStart = System.nanoTime();
             for (DatasetReader.WordCount word : words) {
                 dictionary.add(word.word(), word.count());
             }
-            long buildRotations = getRotationCount(dictionary);
-            int buildHeight = getTreeHeight(dictionary);
-            setInstrumentationEnabled(dictionary, false);
+            long buildElapsed = System.nanoTime() - buildStart;
+            long memoryAfter = usedMemory();
 
-            long start = System.nanoTime(); // BEGIN MEASUREMENT
-            for (String query : queries) {          // a batch of contains calls
-                if (dictionary.contains(query)) {
-                    checksum++;
-                }
+            long start = System.nanoTime();
+            checksum += workload.run(dictionary);
+            long elapsed = System.nanoTime() - start;
+
+            Dictionary instrumentedDictionary = factory.get();
+            setInstrumentationEnabled(instrumentedDictionary, true);
+            resetInstrumentationCounters(instrumentedDictionary);
+            for (DatasetReader.WordCount word : words) {
+                instrumentedDictionary.add(word.word(), word.count());
             }
-            long elapsed = System.nanoTime() - start; // END MEASUREMENT
+            long buildRotations = getRotationCount(instrumentedDictionary);
+            int buildHeight = getTreeHeight(instrumentedDictionary);
+            setInstrumentationEnabled(instrumentedDictionary, false);
 
-            if (run >= WARMUP_RUNS) {              // ignore the warm-up runs
+            if (run >= WARMUP_RUNS) {
                 int measuredRun = run - WARMUP_RUNS;
+                buildTimes[measuredRun] = buildElapsed;
                 times[measuredRun] = elapsed;
+                memoryBytes[measuredRun] = Math.max(0, memoryAfter - memoryBefore);
                 rotations[measuredRun] = buildRotations;
                 heights[measuredRun] = buildHeight;
             }
         }
 
-        System.err.println("contains hits = " + checksum); // sanity check
+        System.err.println(workloadName + " checksum = " + checksum);
         for (int run = 0; run < MEASURED_RUNS; run++) {
-            double nsPerContains = (double) times[run] / queries.size();
-            System.out.printf("%s,%s,%d,%d,%.1f,%d,%d%n",
-                    solution, "contains", n, run + 1, nsPerContains, rotations[run], heights[run]);
+            printResult(solution, workloadName, n, run + 1, buildTimes[run],
+                    memoryBytes[run], times[run], operationCount,
+                    rotations[run], heights[run]);
         }
+    }
+
+    /** Creates reproducible one-character mutations of randomly selected words. */
+    private static List<String> generateMisspellings(
+            List<DatasetReader.WordCount> words, int queryCount, long seed) {
+        if (words.isEmpty()) {
+            throw new IllegalArgumentException("Cannot generate queries from an empty word list.");
+        }
+
+        Random random = new Random(seed);
+        List<String> misspellings = new ArrayList<>(queryCount);
+        for (int i = 0; i < queryCount; i++) {
+            char[] characters =
+                    words.get(random.nextInt(words.size())).word().toCharArray();
+            int position = random.nextInt(characters.length);
+            characters[position] =
+                    characters[position] == 'z' ? 'a' : (char) (characters[position] + 1);
+            misspellings.add(new String(characters));
+        }
+        return misspellings;
+    }
+
+    /** Creates reproducible prefixes of length one through four from dataset words. */
+    private static List<String> generatePrefixQueries(
+            List<DatasetReader.WordCount> words, int queryCount, long seed) {
+        if (words.isEmpty()) {
+            throw new IllegalArgumentException("Cannot generate prefixes from an empty word list.");
+        }
+
+        Random random = new Random(seed);
+        List<String> prefixes = new ArrayList<>(queryCount);
+        for (int i = 0; i < queryCount; i++) {
+            String word = words.get(random.nextInt(words.size())).word();
+            int prefixLength = Math.min(word.length(), 1 + random.nextInt(4));
+            prefixes.add(word.substring(0, prefixLength));
+        }
+        return prefixes;
     }
     
     /* Stess test - lexicographically sorted insertion */
@@ -67,12 +177,14 @@ public class Benchmark {
     static void stressTest(String solution, Supplier<Dictionary> factory,
                         List<DatasetReader.WordCount> words, int n) {
         long[] times = new long[MEASURED_RUNS];
+        long[] memoryBytes = new long[MEASURED_RUNS];
         long[] rotations = new long[MEASURED_RUNS];
         int[] heights = new int[MEASURED_RUNS];
         int checksum = 0; // not necessary for lost vals, but good for test progress
         
         /* Measure time */
         for (int run = 0; run < WARMUP_RUNS + MEASURED_RUNS; run++) {
+            long memoryBefore = usedMemory();
             Dictionary dictionary = factory.get(); // a fresh structure each run
 
             long start = System.nanoTime(); //START TIMER
@@ -84,6 +196,8 @@ public class Benchmark {
             if (run >= WARMUP_RUNS) {              // ignore the warm-up runs
                 int measuredRun = run - WARMUP_RUNS;
                 times[measuredRun] = elapsed;
+                memoryBytes[measuredRun] =
+                        Math.max(0, usedMemory() - memoryBefore);
             }
         }
         
@@ -111,15 +225,17 @@ public class Benchmark {
         /* Compute and print results */
         System.err.println("stress-test lines processed = " + checksum); // sanity check
         for (int run = 0; run < MEASURED_RUNS; run++) {
-            double nsPerAdd = (double) times[run] / words.size();
-            System.out.printf("%s,%s,%d,%d,%.1f,%d,%d%n",
-                    solution, "stress_test", n, run + 1, nsPerAdd, rotations[run], heights[run]);
+            printResult(solution, "stress_test", n, run + 1, times[run],
+                    memoryBytes[run], times[run], words.size(),
+                    rotations[run], heights[run]);
         }
     }
 
     static void updates(String solution, Supplier<Dictionary> factory,
                         List<DatasetReader.WordCount> words, List<String> queries, int n) {
+        long[] buildTimes = new long[MEASURED_RUNS];
         long[] times = new long[MEASURED_RUNS];
+        long[] memoryBytes = new long[MEASURED_RUNS];
         long[] rotations = new long[MEASURED_RUNS];
         int[] heights = new int[MEASURED_RUNS];
         long checksum = 0;
@@ -148,17 +264,24 @@ public class Benchmark {
 
         /* Measure time */
         for (int run = 0; run < WARMUP_RUNS + MEASURED_RUNS; run++) {
+            long memoryBefore = usedMemory();
             Dictionary dictionary = factory.get();
+            long buildStart = System.nanoTime();
             for (DatasetReader.WordCount word : words) { // init dictionary, add data
                 dictionary.add(word.word(), word.count());
             }
+            long buildElapsed = System.nanoTime() - buildStart;
+            long memoryAfter = usedMemory();
 
             long start = System.nanoTime();
             checksum += runUpdateOperations(dictionary, queries, updateWords); 
             long elapsed = System.nanoTime() - start;
 
             if (run >= WARMUP_RUNS) {
-                times[run - WARMUP_RUNS] = elapsed;
+                int measuredRun = run - WARMUP_RUNS;
+                buildTimes[measuredRun] = buildElapsed;
+                times[measuredRun] = elapsed;
+                memoryBytes[measuredRun] = Math.max(0, memoryAfter - memoryBefore);
             }
         }
 
@@ -188,11 +311,37 @@ public class Benchmark {
 
         System.err.println("update workload checksum = " + checksum);
         for (int run = 0; run < MEASURED_RUNS; run++) {
-            double nsPerOperation = (double) times[run] / operationsPerRun;
-            System.out.printf("%s,%s,%d,%d,%.1f,%d,%d%n",
-                    solution, "updates_during_lookups", n, run + 1,
-                    nsPerOperation, rotations[run], heights[run]);
+            printResult(solution, "updates_during_lookups", n, run + 1,
+                    buildTimes[run], memoryBytes[run], times[run], operationsPerRun,
+                    rotations[run], heights[run]);
         }
+    }
+
+    private static long usedMemory() {
+        System.gc();
+        Runtime runtime = Runtime.getRuntime();
+        return runtime.totalMemory() - runtime.freeMemory();
+    }
+
+    private static void printResult(
+            String solution,
+            String workload,
+            int n,
+            int run,
+            long buildTimeNs,
+            long memoryBytes,
+            long workloadTimeNs,
+            int operationCount,
+            long rotations,
+            int height) {
+        double latencyNs = (double) workloadTimeNs / operationCount;
+        double throughputOpsPerSecond =
+                operationCount / (workloadTimeNs / 1_000_000_000.0);
+        System.out.printf("%s,%s,%d,%d,%.3f,%.2f,%.1f,%.1f,%d,%d%n",
+                solution, workload, n, run,
+                buildTimeNs / 1_000_000.0,
+                Math.max(0, memoryBytes) / 1024.0,
+                latencyNs, throughputOpsPerSecond, rotations, height);
     }
 
     private static long runUpdateOperations(
@@ -278,15 +427,32 @@ public class Benchmark {
         // generate 100,000 queries using the dataset
         List<String> queries = sampleQueries(allWords, 100_000, 42);
         // CSV header
-        System.out.println("solution,workload,n,run,ns_per_operation,rotations,height");
+        System.out.println("solution,workload,n,run,build_ms,memory_kb,"
+                + "latency_ns,throughput_ops_sec,rotations,height");
         // for each sublist view (10^2, 10^3, 10^4, 10^5, and entire wordlist), 
         // run benchmark on both solutions 
 
-        /* CONTAINS (adapted from example) */
+        /* CONTAINS */
         for (int n : new int[] {100, 1_000, 10_000, 100_000, allWords.size()}) {
             List<DatasetReader.WordCount> words = allWords.subList(0, n);
             measure("avl", Solution1::new, words, queries, n);
             measure("red-black", Solution2RBTree::new, words, queries, n);
+        }
+
+        /* MISSSPELLING */
+        for (int n : new int[] {100, 1_000, 10_000, 100_000, allWords.size()}) {
+            List<DatasetReader.WordCount> words = allWords.subList(0, n);
+            List<String> misspellings = generateMisspellings(words, 100_000, 42);
+            measureMisspellings("avl", Solution1::new, words, misspellings, n);
+            measureMisspellings("red-black", Solution2RBTree::new, words, misspellings, n);
+        }
+
+        /* PREFIX-QUERY */
+        for (int n : new int[] {100, 1_000, 10_000, 100_000, allWords.size()}) {
+            List<DatasetReader.WordCount> words = allWords.subList(0, n);
+            List<String> prefixes = generatePrefixQueries(words, 100_000, 42);
+            measurePrefixQueries("avl", Solution1::new, words, prefixes, n);
+            measurePrefixQueries("red-black", Solution2RBTree::new, words, prefixes, n);
         }
 
         /* MIXED UPDATES */
@@ -307,14 +473,10 @@ public class Benchmark {
     private static List<String> sampleQueries(
             List<DatasetReader.WordCount> words, int queryCount, long seed) {
         Random random = new Random(seed);
-        List<String> queries = new java.util.ArrayList<>(queryCount);
+        List<String> queries = new ArrayList<>(queryCount);
         for (int i = 0; i < queryCount; i++) {
             queries.add(words.get(random.nextInt(words.size())).word());
         }
         return queries;
     }
 }
-
-// write workload method for random add/del operations mixed in w contains (10%)
-// merge Adnan's methods
-// write workload method for stress test -> lexicographic insertion // DONE
