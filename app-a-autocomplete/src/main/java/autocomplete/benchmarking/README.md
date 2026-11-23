@@ -7,3 +7,8 @@ java -cp target/test-classes:target/classes autocomplete.benchmarking.BenchmarkF
 
 Note: The benchmark harness is dependent on the source code, count_1w.txt downloaded in the data folder,
 as well as a lexicgraphically sorted version of count_1w.txt. 
+
+On Windows, to rerun the Benchmakr harness, use the command:
+java -cp out autocomplete.benchmarking.BenchmarkFINAL > results\lookup.csv
+
+This also outputs the results to the CSV file.
