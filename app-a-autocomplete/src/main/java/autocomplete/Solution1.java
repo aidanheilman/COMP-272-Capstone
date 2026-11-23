@@ -17,8 +17,6 @@ public class Solution1 implements Dictionary {
     private boolean instrumentationEnabled;
     private long rotationCount;
 
-    // TODO: declare the fields of your data structure here.
-
     public Solution1() {
         this.root = null;
         this.size = 0;

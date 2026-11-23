@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 import java.io.IOException;
 import java.nio.file.Path;
 
-public class Benchmark {
+public class BenchmarkFINAL {
     static final int WARMUP_RUNS = 5;
     static final int MEASURED_RUNS = 7;
     static final int TOP_K = 10;

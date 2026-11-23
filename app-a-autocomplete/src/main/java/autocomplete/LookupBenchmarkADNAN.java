@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.Supplier;
 
-public class LookupBenchmark {
+public class LookupBenchmarkADNAN {
     static final int WARMUP_RUNS = 5;
     static final int MEASURED_RUNS = 7;
     static final int QUERY_COUNT = 10_000;
@@ -167,7 +167,7 @@ public class LookupBenchmark {
     public static void main(String[] args) throws IOException {
         // Verify CLI argument and load the full dataset from disk
         if (args.length < 1) {
-            System.err.println("Usage: java autocomplete.LookupBenchmark <data.csv>");
+            System.err.println("Usage: java autocomplete.LookupBenchmark <count_1w.txt filepath>");
             return;
         }
         List<Entry> all = loadEntries(args[0]);
