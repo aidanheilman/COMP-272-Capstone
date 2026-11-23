@@ -1,5 +1,6 @@
 package autocomplete;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -28,5 +29,25 @@ class Solution1Test extends DictionaryTest {
             assertTrue(tree.remove(word));
             tree.assertValidAVL();
         }
+    }
+
+    @Test
+    void avlInstrumentationCanBeToggledAndReset() {
+        Solution1 tree = new Solution1();
+        tree.setInstrumentationEnabled(true);
+        tree.add("c", 1);
+        tree.add("b", 1);
+        tree.add("a", 1);
+
+        assertEquals(1, tree.getRotationCount());
+        assertEquals(2, tree.getTreeHeight());
+
+        tree.setInstrumentationEnabled(false);
+        tree.add("e", 1);
+        tree.add("d", 1);
+        assertEquals(1, tree.getRotationCount());
+
+        tree.resetInstrumentationCounters();
+        assertEquals(0, tree.getRotationCount());
     }
 }
